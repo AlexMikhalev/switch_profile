@@ -1,0 +1,13 @@
+profiles:
+  personal:
+    email: alex@metacortex.engineer
+    username: "Alex Mikhalev"
+    token_env: GITHUB_TOKEN_PERSONAL
+    ssh_config: ~/.ssh/config.personal
+  klarian:
+    email: alex.mikhalev@klarian.com
+    username: "Alex Mikhalev"
+    token_env: GITHUB_TOKEN_KLARIAN
+    ssh_config: ~/.ssh/config.klarian
+
+default_profile: personal 

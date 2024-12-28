@@ -1,11 +1,11 @@
-use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
+use twelf::{config, Layer};
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -19,88 +19,44 @@ enum Commands {
     /// Switch to a specific profile
     Switch {
         /// Name of the profile to switch to
-        profile: String,
+        profile: Option<String>,
     },
     /// List all available profiles
     List,
-    /// Add a new profile
-    Add {
-        /// Name of the profile
-        name: String,
-        /// Git user email
-        email: String,
-        /// Git user name
-        username: String,
-    },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Profile {
-    name: String,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ProfileConfig {
     email: String,
     username: String,
+    token_env: String,
+    ssh_config: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default)]
+#[config]
 struct Config {
-    profiles: Vec<Profile>,
+    profiles: HashMap<String, ProfileConfig>,
+    default_profile: String,
 }
 
 impl Config {
     fn load() -> Result<Self> {
-        let config_path = get_config_path()?;
-        if !config_path.exists() {
-            return Ok(Config { profiles: Vec::new() });
-        }
-
-        let mut file = File::open(&config_path)
-            .with_context(|| format!("Failed to open config file at {:?}", config_path))?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)
-            .context("Failed to read config file")?;
-
-        serde_yaml::from_str(&contents).context("Failed to parse config file")
+        Config::with_layers(&[
+            Layer::Yaml("config.yaml".into()),
+        ])
+        .context("Failed to load configuration")
     }
 
-    fn save(&self) -> Result<()> {
-        let config_path = get_config_path()?;
-        if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent).context("Failed to create config directory")?;
-        }
-
-        let contents = serde_yaml::to_string(self).context("Failed to serialize config")?;
-        fs::write(&config_path, contents).context("Failed to write config file")?;
-        Ok(())
-    }
-
-    fn add_profile(&mut self, name: String, email: String, username: String) -> Result<()> {
-        if self.profiles.iter().any(|p| p.name == name) {
-            return Err(anyhow::anyhow!("Profile {} already exists", name));
-        }
-
-        self.profiles.push(Profile {
-            name,
-            email,
-            username,
-        });
-        self.save()?;
-        Ok(())
-    }
-
-    fn get_profile(&self, name: &str) -> Option<&Profile> {
-        self.profiles.iter().find(|p| p.name == name)
+    fn get_profile(&self, name: Option<String>) -> Result<(String, &ProfileConfig)> {
+        let profile_name = name.unwrap_or_else(|| self.default_profile.clone());
+        let profile = self.profiles.get(&profile_name)
+            .ok_or_else(|| anyhow::anyhow!("Profile {} not found", profile_name))?;
+        Ok((profile_name, profile))
     }
 }
 
-fn get_config_path() -> Result<PathBuf> {
-    let mut path = dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?;
-    path.push("github-profile-switcher");
-    path.push("config.yml");
-    Ok(path)
-}
-
-fn switch_profile(profile: &Profile) -> Result<()> {
+fn switch_profile(name: &str, profile: &ProfileConfig) -> Result<()> {
     // Set global git config
     Command::new("git")
         .args(["config", "--global", "user.email", &profile.email])
@@ -112,40 +68,42 @@ fn switch_profile(profile: &Profile) -> Result<()> {
         .output()
         .context("Failed to set git username")?;
 
-    println!("Switched to profile: {}", profile.name);
+    // Set SSH config
+    let expanded_ssh_path = shellexpand::tilde(&profile.ssh_config);
+    if let Ok(ssh_config) = std::fs::read_to_string(expanded_ssh_path.as_ref()) {
+        let ssh_config_path = PathBuf::from(shellexpand::tilde("~/.ssh/config").as_ref());
+        std::fs::write(&ssh_config_path, ssh_config)
+            .context("Failed to update SSH config")?;
+    }
+
+    // Print environment variable that needs to be set
+    println!("# Run this command to set up the environment:");
+    println!("export GITHUB_TOKEN=\"${{{0}}}\"", profile.token_env);
+
+    println!("\nSwitched to profile: {}", name);
     println!("Email: {}", profile.email);
     println!("Username: {}", profile.username);
+    println!("Using token from: {}", profile.token_env);
+    println!("SSH config: {}", profile.ssh_config);
     Ok(())
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut config = Config::load()?;
+    let config = Config::load()?;
 
     match cli.command {
         Commands::Switch { profile } => {
-            let profile = config
-                .get_profile(&profile)
-                .ok_or_else(|| anyhow::anyhow!("Profile {} not found", profile))?;
-            switch_profile(profile)?;
+            let (name, profile) = config.get_profile(profile)?;
+            switch_profile(&name, profile)?;
         }
         Commands::List => {
-            if config.profiles.is_empty() {
-                println!("No profiles configured");
-                return Ok(());
+            println!("Available profiles (default: {}):", config.default_profile);
+            for (name, profile) in &config.profiles {
+                println!("- {} ({} <{}>)", name, profile.username, profile.email);
+                println!("  Token environment: {}", profile.token_env);
+                println!("  SSH config: {}", profile.ssh_config);
             }
-            println!("Available profiles:");
-            for profile in &config.profiles {
-                println!("- {} ({} <{}>)", profile.name, profile.username, profile.email);
-            }
-        }
-        Commands::Add {
-            name,
-            email,
-            username,
-        } => {
-            config.add_profile(name.clone(), email, username)?;
-            println!("Added profile: {}", name);
         }
     }
 

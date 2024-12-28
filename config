@@ -1,0 +1,36 @@
+# Added by OrbStack: 'orb' SSH host for Linux machines
+# This only works if it's at the top of ssh_config (before any Host blocks).
+# This won't be added again if you remove it.
+Include ~/.orbstack/ssh/config
+
+# Personal GitHub
+Host registry
+	HostName registry
+	User gitworker
+
+Host registry
+	HostName registry
+	User alex
+
+Host personalgit
+	HostName github.com
+	User git
+	IdentityFile ~/.ssh/personal.pub
+	IdentitiesOnly yes
+
+# Klarian Bucket
+Host klarianbitbucket
+	HostName bitbucket.org
+	User git
+	IdentityFile ~/.ssh/klarian.pub
+	IdentitiesOnly yes
+
+# Registry
+Host registrygit
+	HostName registry.terraphim.io
+	User alex
+	IdentityFile ~/.ssh/id_rsa.pub
+	IdentitiesOnly yes
+
+Host *
+	IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"

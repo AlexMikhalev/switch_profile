@@ -36,7 +36,7 @@ cargo build --release
 
 ### 1. SSH Keys
 
-Create SSH key pairs for each profile or use existing ones from 1Password:
+Create SSH key pairs for each profile or use existing ones from 1Password following [link](https://developer.1password.com/docs/ssh/agent/advanced/#use-multiple-github-accounts):
 
 ```bash
 # For personal profile

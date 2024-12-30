@@ -76,15 +76,15 @@ fn switch_profile(name: &str, profile: &ProfileConfig) -> Result<()> {
             .context("Failed to update SSH config")?;
     }
 
-    // Print environment variable that needs to be set
-    println!("# Run this command to set up the environment:");
-    println!("export GITHUB_TOKEN=\"${{{0}}}\"", profile.token_env);
-
-    println!("\nSwitched to profile: {}", name);
-    println!("Email: {}", profile.email);
-    println!("Username: {}", profile.username);
-    println!("Using token from: {}", profile.token_env);
-    println!("SSH config: {}", profile.ssh_config);
+    // Print environment variable export command
+    println!("export GITHUB_TOKEN=\"${{{}}}\"", profile.token_env);
+    
+    // Print status as a comment
+    println!("# Profile switched to: {}", name);
+    println!("# Email: {}", profile.email);
+    println!("# Username: {}", profile.username);
+    println!("# Using token from: {}", profile.token_env);
+    println!("# SSH config: {}", profile.ssh_config);
     Ok(())
 }
 
@@ -98,11 +98,11 @@ fn main() -> Result<()> {
             switch_profile(&name, profile)?;
         }
         Commands::List => {
-            println!("Available profiles (default: {}):", config.default_profile);
+            println!("# Available profiles (default: {}):", config.default_profile);
             for (name, profile) in &config.profiles {
-                println!("- {} ({} <{}>)", name, profile.username, profile.email);
-                println!("  Token environment: {}", profile.token_env);
-                println!("  SSH config: {}", profile.ssh_config);
+                println!("# - {} ({} <{}>)", name, profile.username, profile.email);
+                println!("#   Token environment: {}", profile.token_env);
+                println!("#   SSH config: {}", profile.ssh_config);
             }
         }
     }

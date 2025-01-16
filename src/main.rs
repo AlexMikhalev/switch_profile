@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
+use std::fs;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use twelf::{config, Layer};
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -33,19 +33,46 @@ struct ProfileConfig {
     ssh_config: String,
 }
 
-#[derive(Debug, Default)]
-#[config]
+#[derive(Debug, Serialize, Deserialize)]
 struct Config {
     profiles: HashMap<String, ProfileConfig>,
     default_profile: String,
 }
 
 impl Config {
+    fn get_config_paths() -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        
+        // Current directory
+        paths.push(PathBuf::from("config.yaml"));
+        
+        // XDG config directory
+        if let Some(mut config_dir) = dirs::config_dir() {
+            config_dir.push("switch_profile");
+            config_dir.push("config.yaml");
+            paths.push(config_dir);
+        }
+        
+        paths
+    }
+
     fn load() -> Result<Self> {
-        Config::with_layers(&[
-            Layer::Yaml("config.yaml".into()),
-        ])
-        .context("Failed to load configuration")
+        let paths = Self::get_config_paths();
+        let mut last_error = None;
+
+        for path in paths {
+            if path.exists() {
+                let contents = fs::read_to_string(&path)
+                    .with_context(|| format!("Failed to read config file at {:?}", path))?;
+                return serde_yaml::from_str(&contents)
+                    .with_context(|| format!("Failed to parse configuration from {:?}", path));
+            } else {
+                last_error = Some(format!("Configuration file not found at {:?}", path));
+            }
+        }
+
+        Err(anyhow::anyhow!(last_error.unwrap_or_else(|| 
+            "No configuration file found. Create config.yaml in the current directory or ~/.config/switch_profile/".to_string())))
     }
 
     fn get_profile(&self, name: Option<String>) -> Result<(String, &ProfileConfig)> {
@@ -54,6 +81,19 @@ impl Config {
             .ok_or_else(|| anyhow::anyhow!("Profile {} not found", profile_name))?;
         Ok((profile_name, profile))
     }
+}
+
+fn ensure_config_dir() -> Result<PathBuf> {
+    let mut config_dir = dirs::config_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?;
+    config_dir.push("switch_profile");
+    
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir)
+            .with_context(|| format!("Failed to create config directory at {:?}", config_dir))?;
+    }
+    
+    Ok(config_dir)
 }
 
 fn switch_profile(name: &str, profile: &ProfileConfig) -> Result<()> {
@@ -89,6 +129,9 @@ fn switch_profile(name: &str, profile: &ProfileConfig) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    // Ensure config directory exists
+    ensure_config_dir()?;
+
     let cli = Cli::parse();
     let config = Config::load()?;
 

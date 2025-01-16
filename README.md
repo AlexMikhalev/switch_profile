@@ -10,6 +10,7 @@ A command-line tool written in Rust to easily switch between different GitHub pr
 - Automatic Git email and username switching
 - Shell integration with error handling
 - Support for 1Password SSH agent
+- Flexible configuration file locations
 
 ## Prerequisites
 
@@ -32,11 +33,20 @@ cd switch_profile
 cargo build --release
 ```
 
+3. Install the binary (optional):
+```bash
+cargo install --path .
+```
+
 ## Configuration
+
+The tool looks for its configuration file in the following locations (in order):
+1. `./config.yaml` (current directory)
+2. `~/.config/switch_profile/config.yaml` (XDG config directory)
 
 ### 1. SSH Keys
 
-Create SSH key pairs for each profile or use existing ones from 1Password following [link](https://developer.1password.com/docs/ssh/agent/advanced/#use-multiple-github-accounts):
+Create SSH key pairs for each profile or use existing ones from 1Password following [1Password SSH Agent Guide](https://developer.1password.com/docs/ssh/agent/advanced/#use-multiple-github-accounts):
 
 ```bash
 # For personal profile
@@ -120,7 +130,7 @@ export GITHUB_TOKEN_KLARIAN="your-klarian-github-token"
 
 ### 4. Profile Configuration
 
-Create a `config.yaml` file in the project directory:
+Create a `config.yaml` file in either the current directory or `~/.config/switch_profile/`:
 
 ```yaml
 profiles:
@@ -146,7 +156,7 @@ Add these functions and aliases to your `~/.zshrc` and/or `~/.bashrc`:
 # GitHub Profile Switcher
 gp-switch() {
     local output
-    output=$($HOME/projects/personal/switch_profile/target/release/switch_profile switch "$1")
+    output=$($HOME/.cargo/bin/switch_profile switch "$1")
     local exit_code=$?
     
     if [ $exit_code -ne 0 ]; then
@@ -159,7 +169,7 @@ gp-switch() {
 }
 alias gp-personal="gp-switch personal"
 alias gp-klarian="gp-switch klarian"
-alias gp-list="$HOME/projects/personal/switch_profile/target/release/switch_profile list"
+alias gp-list="$HOME/.cargo/bin/switch_profile list"
 ```
 
 After adding the shell integration, reload your shell configuration:
@@ -215,17 +225,25 @@ The tool provides feedback with comments (prefixed with #) showing:
 
 4. Shell Integration:
    - Make sure the shell function is loaded: `type gp-switch`
-   - Check if the binary is accessible: `ls -l $HOME/projects/personal/switch_profile/target/release/switch_profile`
+   - Check if the binary is accessible: `ls -l $HOME/.cargo/bin/switch_profile`
    - Verify shell script permissions
+
+5. Configuration Issues:
+   - Check if config file exists in either:
+     - Current directory: `ls config.yaml`
+     - XDG config directory: `ls ~/.config/switch_profile/config.yaml`
+   - Verify YAML syntax: `yamllint config.yaml`
 
 ## Dependencies
 
 - clap: Command line argument parsing
 - serde: Serialization/deserialization for YAML
 - anyhow: Error handling
-- twelf: Configuration management with YAML support
+- dirs: XDG directory handling
 - shellexpand: Shell path expansion
 
 ## License
 
-MIT License 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2024 Alex Mikhalev 
